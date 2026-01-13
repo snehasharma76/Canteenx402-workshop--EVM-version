@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createWalletClient, http, custom } from "viem";
+import { createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 
-// x402 v2 Client - Following official migration guide
+// x402 v2 Client
 import { x402Client, wrapFetchWithPayment } from "@x402/fetch";
 import { registerExactEvmScheme } from "@x402/evm/exact/client";
 
@@ -23,50 +23,27 @@ export default function Home() {
   const [fetchWithPayment, setFetchWithPayment] = useState<
     ((input: RequestInfo, init?: RequestInit) => Promise<Response>) | null
   >(null);
+  const [showReveal, setShowReveal] = useState(false);
 
   const DEMO_PRIVATE_KEY = process.env.NEXT_PUBLIC_PRIVATE_KEY;
 
-  // Initialize wallet client with x402 v2 pattern
   useEffect(() => {
-    // Option 1: Use private key from env (for demo)
     if (DEMO_PRIVATE_KEY) {
       try {
         const normalizedKey = DEMO_PRIVATE_KEY.startsWith("0x")
           ? DEMO_PRIVATE_KEY
           : `0x${DEMO_PRIVATE_KEY}`;
-
-        // Create viem account from private key
         const signer = privateKeyToAccount(normalizedKey as `0x${string}`);
-
-        // x402 v2 pattern: Create x402Client and register EVM scheme
         const x402client = new x402Client();
         registerExactEvmScheme(x402client, { signer });
-
-        // Wrap fetch with payment handling
         const wrappedFetch = wrapFetchWithPayment(fetch, x402client);
-
         setWalletAddress(signer.address);
         setFetchWithPayment(() => wrappedFetch);
       } catch (err: any) {
-        setError(`Failed to init from env: ${err.message}`);
+        setError(`Failed to init: ${err.message}`);
       }
-      return;
-    }
-
-    // Option 2: Use browser wallet (MetaMask etc) - would need additional setup
-    if (typeof window !== "undefined" && window.ethereum) {
-      // Browser wallet support would require different approach for v2
-      // For now, just show a message
-      setError("Please set NEXT_PUBLIC_PRIVATE_KEY in .env.local for demo");
     }
   }, [DEMO_PRIVATE_KEY]);
-
-  const connectBrowserWallet = async () => {
-    if (!DEMO_PRIVATE_KEY) {
-      setError("Browser wallet not yet supported in this demo. Please use private key in .env.local");
-      return;
-    }
-  };
 
   const handleGetFortune = async () => {
     if (!fetchWithPayment) {
@@ -77,26 +54,24 @@ export default function Home() {
     setLoading(true);
     setError(null);
     setFortune(null);
+    setShowReveal(false);
 
     try {
-      console.log("Making request with x402 v2 fetchWithPayment...");
       const res = await fetchWithPayment("/api/fortune");
-      console.log("Response status:", res.status);
-
-      // x402-fetch should handle 402 automatically
       if (!res.ok && res.status !== 402) {
-        throw new Error(`Request failed: ${res.status} ${res.statusText}`);
+        throw new Error(`Request failed: ${res.status}`);
       }
-
       if (res.status === 402) {
-        throw new Error("Payment required but not processed. Check wallet funds and network.");
+        throw new Error("Payment not processed");
       }
-
       const data = await res.json();
-      setFortune(data.fortune);
+      // Trigger reveal animation
+      setShowReveal(true);
+      setTimeout(() => {
+        setFortune(data.fortune);
+      }, 600);
     } catch (err: any) {
-      console.error("Error:", err);
-      setError(err.message || "Failed to get fortune");
+      setError(err.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
@@ -110,79 +85,138 @@ export default function Home() {
   if (!mounted) return null;
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-900 text-zinc-100 p-8 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 items-center max-w-md w-full">
-        <h1 className="text-4xl font-bold text-center bg-gradient-to-r from-amber-200 to-yellow-500 bg-clip-text text-transparent">
-          EVM Fortune Cookie
-        </h1>
-        <p className="text-xs text-amber-400">x402 v2</p>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-zinc-900 via-zinc-900 to-amber-950/20 text-zinc-100 p-8">
+      {/* Floating particles effect via gradient */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/4 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-48 h-48 bg-yellow-500/5 rounded-full blur-3xl animate-pulse delay-1000" />
+      </div>
 
-        <div className="w-full bg-zinc-800/50 border border-zinc-700 rounded-xl p-6 shadow-xl backdrop-blur-sm">
+      <main className="relative flex flex-col gap-6 items-center max-w-lg w-full">
+        {/* Header */}
+        <div className="text-center space-y-2">
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-200 bg-clip-text text-transparent drop-shadow-lg">
+            🥠 Fortune Cookie
+          </h1>
+          <p className="text-amber-400/80 text-sm tracking-wide">
+            Powered by x402 v2
+          </p>
+        </div>
+
+        {/* Main Card */}
+        <div className="w-full bg-zinc-800/60 backdrop-blur-md border border-amber-500/20 rounded-2xl p-8 shadow-2xl shadow-amber-900/10">
           {!walletAddress ? (
-            <div className="text-center space-y-4">
-              <p className="text-zinc-400">
+            <div className="text-center space-y-6">
+              <div className="text-6xl animate-bounce">🔮</div>
+              <p className="text-zinc-300 text-lg">
                 {DEMO_PRIVATE_KEY
-                  ? "Initializing demo wallet..."
-                  : "Set NEXT_PUBLIC_PRIVATE_KEY in .env.local"}
+                  ? "Connecting to the mystical realm..."
+                  : "Configure your wallet to peek into destiny"}
               </p>
-              {!DEMO_PRIVATE_KEY && (
-                <button
-                  onClick={connectBrowserWallet}
-                  className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-500 rounded-lg font-semibold transition-colors"
-                  type="button"
-                >
-                  Connect Wallet
-                </button>
-              )}
             </div>
           ) : (
             <div className="space-y-6">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-zinc-500 font-mono">
-                  {walletAddress?.slice(0, 6)}...{walletAddress?.slice(-4)}
+              {/* Wallet Status */}
+              <div className="flex justify-between items-center bg-zinc-900/50 rounded-xl px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-2.5 h-2.5 bg-green-400 rounded-full animate-pulse shadow-lg shadow-green-400/50" />
+                  <span className="text-zinc-300 font-medium">
+                    {walletAddress?.slice(0, 8)}...{walletAddress?.slice(-6)}
+                  </span>
+                </div>
+                <span className="text-green-400 font-semibold text-sm uppercase tracking-wider">
+                  Connected
                 </span>
-                <span className="text-green-400 text-xs">Connected</span>
               </div>
 
-              <div className="min-h-[120px] flex items-center justify-center bg-zinc-900/50 rounded-lg p-6 border border-zinc-700/50">
+              {/* Fortune Display */}
+              <div className="min-h-[180px] flex items-center justify-center bg-gradient-to-br from-zinc-900/80 to-zinc-800/50 rounded-xl p-8 border border-amber-500/10 relative overflow-hidden">
+                {/* Decorative corners */}
+                <div className="absolute top-2 left-2 w-4 h-4 border-t-2 border-l-2 border-amber-500/30 rounded-tl-lg" />
+                <div className="absolute top-2 right-2 w-4 h-4 border-t-2 border-r-2 border-amber-500/30 rounded-tr-lg" />
+                <div className="absolute bottom-2 left-2 w-4 h-4 border-b-2 border-l-2 border-amber-500/30 rounded-bl-lg" />
+                <div className="absolute bottom-2 right-2 w-4 h-4 border-b-2 border-r-2 border-amber-500/30 rounded-br-lg" />
+
                 {loading ? (
-                  <div className="animate-pulse text-amber-500">
-                    Consulting the oracles...
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="text-5xl animate-spin">🥠</div>
+                    <p className="text-amber-400 animate-pulse text-lg">
+                      Cracking open your fortune...
+                    </p>
                   </div>
+                ) : showReveal && !fortune ? (
+                  <div className="text-6xl animate-ping">✨</div>
                 ) : fortune ? (
-                  <p className="text-lg font-serif italic text-amber-100 text-center">
-                    "{fortune}"
-                  </p>
+                  <div className="text-center space-y-3 animate-fade-in">
+                    <div className="text-4xl">🌟</div>
+                    <p className="text-xl font-serif italic text-amber-100 leading-relaxed">
+                      "{fortune}"
+                    </p>
+                  </div>
                 ) : (
-                  <p className="text-zinc-500 text-sm text-center">
-                    Pay a small fortune to modify your destiny.
-                  </p>
+                  <div className="text-center space-y-3">
+                    <div className="text-5xl opacity-50">🥠</div>
+                    <p className="text-zinc-400 text-lg">
+                      Crack open a cookie to reveal your destiny
+                    </p>
+                  </div>
                 )}
               </div>
 
+              {/* Error Message */}
               {error && (
-                <p className="text-red-500 text-xs text-center bg-red-900/20 p-2 rounded">
-                  {error}
-                </p>
+                <div className="bg-red-900/30 border border-red-500/30 rounded-xl px-4 py-3 text-center">
+                  <p className="text-red-400">{error}</p>
+                </div>
               )}
 
+              {/* Action Button */}
               <button
                 onClick={handleGetFortune}
                 disabled={loading || !fetchWithPayment}
-                className="w-full py-3 px-6 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg font-bold text-black transition-colors"
+                className="w-full py-4 px-6 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 disabled:from-zinc-600 disabled:to-zinc-600 disabled:cursor-not-allowed rounded-xl font-bold text-lg text-zinc-900 transition-all duration-300 shadow-lg shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.02] active:scale-[0.98]"
                 type="button"
               >
-                {loading ? "Processing..." : "Open Fortune Cookie ($0.01 USDC)"}
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <span className="animate-spin">🥠</span>
+                    Processing Payment...
+                  </span>
+                ) : (
+                  <span className="flex items-center justify-center gap-2">
+                    🥠 Open Fortune Cookie
+                    <span className="text-sm font-normal opacity-80">
+                      ($0.01 USDC)
+                    </span>
+                  </span>
+                )}
               </button>
             </div>
           )}
         </div>
 
-        <div className="text-xs text-zinc-600 text-center">
-          <p>Powered by x402 v2</p>
-          <p>Network: Base Sepolia (eip155:84532)</p>
+        {/* Footer */}
+        <div className="text-center space-y-1 mt-4">
+          <p className="text-zinc-200 text-sm">Base Sepolia • USDC</p>
         </div>
       </main>
+
+      {/* Custom animation styles */}
+      <style jsx>{`
+        @keyframes fade-in {
+          from {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+        .animate-fade-in {
+          animation: fade-in 0.5s ease-out;
+        }
+      `}</style>
     </div>
   );
 }
