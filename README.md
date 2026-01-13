@@ -1,36 +1,111 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# EVM Fortune Cookie 🥠
 
-## Getting Started
+A demonstration of the [x402 Payment Protocol](https://x402.org) using Next.js on Base Sepolia.
 
-First, run the development server:
+## Overview
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+This project shows how to implement HTTP 402 Payment Required flows using the x402 library. When a user requests a "fortune", they must pay a small amount of USDC, which is handled automatically by the x402-fetch wrapper.
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router)
+- **Payment Protocol**: x402 v1 (`x402-next`, `x402-fetch`)
+- **Blockchain**: Base Sepolia (Testnet)
+- **Currency**: USDC
+- **Wallet**: viem
+
+## How It Works
+
+```
+User clicks "Open Fortune Cookie"
+         ↓
+1. Client makes request to /api/fortune
+2. Middleware returns 402 + payment requirements
+3. x402-fetch automatically:
+   - Signs payment authorization
+   - Sends to x402 facilitator
+   - Retries request with payment proof
+4. Server returns fortune
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 1. Install Dependencies
+```bash
+npm install
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 2. Configure Environment
+Copy the example env file and add your private key:
+```bash
+cp env.example .env.local
+```
 
-## Learn More
+Edit `.env.local`:
+```
+NEXT_PUBLIC_PRIVATE_KEY=0x_your_base_sepolia_private_key_here
+```
 
-To learn more about Next.js, take a look at the following resources:
+### 3. Get Testnet USDC
+1. Visit [Circle Faucet](https://faucet.circle.com/)
+2. Select **Base Sepolia**
+3. Request USDC for your wallet address
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### 4. Run Development Server
+```bash
+npm run dev
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Open [http://localhost:3000](http://localhost:3000)
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+evm-fortune/
+├── app/
+│   ├── api/fortune/route.ts   # Protected API endpoint
+│   ├── page.tsx               # Frontend with x402-fetch
+│   ├── providers.tsx          # React providers
+│   └── layout.tsx             # App layout
+├── middleware.ts              # x402 payment middleware
+├── env.example                # Environment template
+└── package.json
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Key Files
+
+### `middleware.ts`
+Configures the x402 payment requirements:
+```typescript
+import { paymentMiddleware } from "x402-next";
+
+export const middleware = paymentMiddleware(
+  "0xYourReceiverAddress",
+  {
+    "/api/fortune": {
+      price: "$0.01",           // USDC amount
+      network: "base-sepolia",
+      config: { description: "Your Fortune Awaits" },
+    },
+  }
+);
+```
+
+### `app/page.tsx`
+Uses `wrapFetchWithPayment` to automatically handle 402 responses:
+```typescript
+import { wrapFetchWithPayment } from "x402-fetch";
+
+const fetchWithPayment = wrapFetchWithPayment(fetch, walletClient);
+const res = await fetchWithPayment("/api/fortune");
+```
+
+## Security Notes
+
+⚠️ **Never commit `.env.local`** - it contains your private key
+- The `.gitignore` already excludes all `.env*` files
+- For production, use proper secret management (Vercel, AWS Secrets, etc.)
+
+## License
+
+MIT
