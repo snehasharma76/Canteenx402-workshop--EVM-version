@@ -6,7 +6,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 
 // x402 v2 Client
-import { x402Client, wrapFetchWithPayment } from "@x402/fetch";
+import { x402Client, x402HTTPClient, wrapFetchWithPayment } from "@x402/fetch";
 import { registerExactEvmScheme } from "@x402/evm/exact/client";
 
 declare global {
@@ -24,6 +24,7 @@ export default function Home() {
     ((input: RequestInfo, init?: RequestInit) => Promise<Response>) | null
   >(null);
   const [showReveal, setShowReveal] = useState(false);
+  const [txHash, setTxHash] = useState<string | null>(null);
 
   const DEMO_PRIVATE_KEY = process.env.NEXT_PUBLIC_PRIVATE_KEY;
 
@@ -64,6 +65,18 @@ export default function Home() {
       if (res.status === 402) {
         throw new Error("Payment not processed");
       }
+
+      // Check for transaction hash in headers
+      try {
+        const httpClient = new x402HTTPClient(new x402Client());
+        const settleResponse = httpClient.getPaymentSettleResponse((name) => res.headers.get(name));
+        if (settleResponse && settleResponse.transaction) {
+          setTxHash(settleResponse.transaction);
+        }
+      } catch (e) {
+        console.warn("Failed to parse payment headers:", e);
+      }
+
       const data = await res.json();
       // Trigger reveal animation
       setShowReveal(true);
@@ -162,6 +175,26 @@ export default function Home() {
                   </div>
                 )}
               </div>
+
+              {/* Transaction Info */}
+              {txHash && (
+                <div className="bg-zinc-900/40 rounded-lg p-3 border border-teal-900/50 animate-fade-in">
+                  <div className="flex flex-col gap-2">
+                    <span className="text-xs text-zinc-500 uppercase tracking-widest font-bold">Transaction Confirmed</span>
+                    <code className="text-[10px] text-teal-300 font-mono break-all bg-black/20 p-2 rounded">
+                      {txHash}
+                    </code>
+                    <a
+                      href={`https://sepolia.basescan.org/tx/${txHash}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-teal-400 hover:text-teal-200 underline mt-1"
+                    >
+                      View on Base Explorer &rarr;
+                    </a>
+                  </div>
+                </div>
+              )}
 
               {/* Error Message */}
               {error && (
